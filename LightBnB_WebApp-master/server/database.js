@@ -1,15 +1,15 @@
 const properties = require('./json/properties.json');
 const users = require('./json/users.json');
-const { Client } = require('pg'); 
+const { Pool } = require('pg'); 
 
-const client = new Client({
+const pool = new Pool({
   user: 'vagrant',
   password: '123',
   host: 'localhost',
   database: 'lightbnb'
 });
 
-client.connect()
+pool.connect()
 .then(() => {
   console.log('Connected');
 });
@@ -22,7 +22,7 @@ client.connect()
  * @return {Promise<{}>} A promise to the user.
  */
 const getUserWithEmail = function(email) {
-  return client.query(`
+  return pool.query(`
   SELECT id, name, email, password 
   FROM users 
   WHERE email = $1;
@@ -37,7 +37,7 @@ exports.getUserWithEmail = getUserWithEmail;
  * @return {Promise<{}>} A promise to the user.
  */
 const getUserWithId = function(id) {
-  return client.query(`
+  return pool.query(`
   SELECT id, name, email, password 
   FROM users 
   WHERE id = $1;
@@ -53,7 +53,7 @@ exports.getUserWithId = getUserWithId;
  * @return {Promise<{}>} A promise to the user.
  */
 const addUser =  function(user) {
-  return client.query(`
+  return pool.query(`
   INSERT INTO users (name, email, password) 
   VALUES ($1, $2, $3);
   `, [user.name, user.email, user.password]); 
@@ -68,7 +68,17 @@ exports.addUser = addUser;
  * @return {Promise<[{}]>} A promise to the reservations.
  */
 const getAllReservations = function(guest_id, limit = 10) {
-  return getAllProperties(null, 2);
+  return pool.query(`
+  SELECT properties.*, reservations.*, AVG(rating) as average_rating 
+  FROM property_reviews 
+  JOIN properties ON property_reviews.property_id = properties.id 
+  JOIN reservations ON reservation_id = reservations.id 
+  WHERE reservations.guest_id = $1 AND end_date < now()::date
+  GROUP BY properties.id, reservations.id
+  ORDER BY start_date 
+  LIMIT $2; 
+  `, [guest_id, limit])
+  .then(res => res.rows);
 }
 exports.getAllReservations = getAllReservations;
 
@@ -81,7 +91,7 @@ exports.getAllReservations = getAllReservations;
  * @return {Promise<[{}]>}  A promise to the properties.
  */
 const getAllProperties = function(options, limit = 10) {
-  return client.query(`
+  return pool.query(`
   SELECT * FROM properties
   LIMIT $1;
   `, [limit])
